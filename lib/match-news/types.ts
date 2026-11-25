@@ -75,6 +75,9 @@ export const StoredNewsBatchSchema = z.object({
   aiCallId: z.string().nullable(),
   createdAt: z.date(),
   checkedAt: z.date(),
+  // Quando ficou usável (ok/empty), no relógio do run. null = failed (ou row anterior à
+  // coluna: quem lê cai no createdAt).
+  usableAt: z.date().nullable(),
 });
 export type StoredNewsBatch = z.infer<typeof StoredNewsBatchSchema>;
 

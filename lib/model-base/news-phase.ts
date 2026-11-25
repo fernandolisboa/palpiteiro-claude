@@ -5,6 +5,7 @@ import { canonicalHash } from "@/lib/ai/judgments/state-hash";
 import {
   findMatchNewsBatch,
   getLatestUsableNewsBatch,
+  getMatchNewsByIds,
   insertMatchNewsBatch,
   listMatchNewsInWindow,
   markMatchNewsBatchRetry,
@@ -29,13 +30,17 @@ import type { NewsResult } from "@/lib/providers/news/types";
 // search: sem custo e sem usuário) → upsert dos itens → hash do conjunto → lote
 // existente só ganha heartbeat; lote novo com itens → 1 Haiku (match_news_extract_v1).
 // Nunca rejeita: cada jogo devolve o lote usável (o deste run ou, quando o feed ou a
-// extração falham, o último usável) ou null.
+// extração falham, o último usável) ou null. Sem JEV possível no run (flag do JEV
+// desligada ou sem chave da TypeSafe) a notícia não entra na base: a fase só lê e
+// guarda os feeds, sem lote e sem Haiku.
 
 export const NEWS_PHASE_BUDGET_MS = 45_000;
 const MATCH_CONCURRENCY = 4;
 const EXTRACT_CONCURRENCY = 3;
-// Teto de uma extração (o adapter corta pelo que resta do prazo da fase).
-const EXTRACT_BUDGET_MS = 20_000;
+// Teto de UMA extração, contado do início dela (o adapter corta em min(prazo da fase,
+// início + teto)). Bem acima do mínimo do canFitCall pro Haiku (20 s): quem decide se
+// a chamada cabe é o prazo da fase, nunca o teto.
+export const EXTRACT_CALL_CAP_MS = 30_000;
 // Tentativas por lote que falha (estouro de prazo não conta).
 export const NEWS_EXTRACT_MAX_ATTEMPTS = 2;
 // Lote usável pra base: visto pelo cron nas últimas 12h (= MODEL_BASE_JEV_REUSE_WINDOW_MS).
@@ -60,6 +65,8 @@ export type NewsPhaseSummary = {
   empty: number;
   matchesWithEvidence: number;
   movedFactors: number;
+  // Feeds lidos e guardados sem extração: sem JEV possível neste run.
+  skippedNoJev: number;
 };
 
 export function emptyNewsSummary(): NewsPhaseSummary {
@@ -76,6 +83,7 @@ export function emptyNewsSummary(): NewsPhaseSummary {
     empty: 0,
     matchesWithEvidence: 0,
     movedFactors: 0,
+    skippedNoJev: 0,
   };
 }
 
@@ -86,19 +94,25 @@ export type NewsPhase = {
   done: Promise<void>;
 };
 
-/** Jogos-alvo: agendados, antes do apito, a ≤ janela do JEV, com feed do ge em algum lado. */
+/**
+ * Jogos-alvo: agendados, antes do apito, a ≤ janela do JEV, com feed do ge em algum
+ * lado. Kickoff mais próximo primeiro, a ordem em que o laço do JEV costuma pedir os
+ * lotes: o primeiro jogo da fila não espera a fase inteira.
+ */
 export function newsTargets(
   matches: readonly DbMatch[],
   now: Date,
   windowMs: number,
 ): DbMatch[] {
-  return matches.filter(
-    (m) =>
-      m.status === "scheduled" &&
-      m.kickoffAt.getTime() > now.getTime() &&
-      m.kickoffAt.getTime() - now.getTime() <= windowMs &&
-      (resolveTeamSources(m.homeTeam) !== null || resolveTeamSources(m.awayTeam) !== null),
-  );
+  return matches
+    .filter(
+      (m) =>
+        m.status === "scheduled" &&
+        m.kickoffAt.getTime() > now.getTime() &&
+        m.kickoffAt.getTime() - now.getTime() <= windowMs &&
+        (resolveTeamSources(m.homeTeam) !== null || resolveTeamSources(m.awayTeam) !== null),
+    )
+    .sort((a, b) => a.kickoffAt.getTime() - b.kickoffAt.getTime());
 }
 
 /** sha256 do conjunto (url, título, trecho), sem depender da ordem. */
@@ -156,9 +170,14 @@ export function startNewsPhase(args: {
   startedMs: number;
   windowMs: number;
   summary: NewsPhaseSummary;
+  // false = sem JEV possível neste run: lê e guarda os feeds, sem lote e sem Haiku.
+  extract: boolean;
 }): NewsPhase {
   const { now, summary } = args;
   const deadlineAt = args.startedMs + NEWS_PHASE_BUDGET_MS;
+  // Relógio do run (`now` + o que passou): marca quando um lote ficou usável, pra fila
+  // do JEV saber se a base já o viu (compara com o checked_at dela).
+  const runClock = () => new Date(now.getTime() + Math.max(0, Date.now() - args.startedMs));
   const targets = newsTargets(args.matches, now, args.windowMs);
   summary.targets = targets.length;
   const perMatch = limiter(MATCH_CONCURRENCY);
@@ -187,11 +206,15 @@ export function startNewsPhase(args: {
           snippet: snippetByUrl.get(b.url) ?? null,
           publishedAt: b.publishedAt,
         })),
-        deadlineAt: Math.min(deadlineAt, Date.now() + EXTRACT_BUDGET_MS),
+        deadlineAt,
+        maxCallMs: EXTRACT_CALL_CAP_MS,
       }),
     );
 
   const processMatch = async (match: DbMatch): Promise<StoredNewsBatch | null> => {
+    // O último lote usável, lido no máximo uma vez por jogo.
+    let lastUsable: Promise<StoredNewsBatch | null> | undefined;
+    const fallbackOnce = () => (lastUsable ??= fallback(match.id));
     const feeds = await getNewsViaTeamFeeds(
       {
         league: match.league,
@@ -204,7 +227,7 @@ export function startNewsPhase(args: {
     if (feeds.kind !== "ok") {
       // Feed fora: o lote anterior fica (e envelhece pelo checked_at).
       if (feeds.kind === "all_failed") summary.feedsFailed++;
-      return fallback(match.id);
+      return args.extract ? fallbackOnce() : null;
     }
     summary.feedsOk++;
     if (feeds.partial) summary.feedsFailed++;
@@ -214,16 +237,31 @@ export function startNewsPhase(args: {
       const s = toStorable(r, feeds.sideByUrl[canonicalUrl(r.url)] ?? null);
       if (s && !items.some((i) => i.url === s.url)) items.push(s);
     }
-    // Feed de um lado caiu (partial): os itens desse lado vêm do que já guardamos na
-    // janela, pra o lote não "esquecer" a notícia por um feed que expirou.
-    if (feeds.failedSides.length > 0) {
+    // Feed de um lado caiu (partial): os itens desse lado vêm do último lote usável, na
+    // ordem do ranking do feed em que ele foi montado (uma matéria prioritária não some
+    // por ser mais velha), pra o lote não "esquecer" a notícia por um feed que expirou.
+    // Sem lote anterior, dos itens guardados desse lado, mais novo primeiro. Sem extração
+    // neste run não há lote a montar: os itens desse lado já estão guardados.
+    if (feeds.failedSides.length > 0 && args.extract) {
       const anchorMs = Math.min(now.getTime(), match.kickoffAt.getTime());
+      const range = { from: anchorMs - NEWS_WINDOW_MS, to: anchorMs };
+      const inWindow = (d: Date) => d.getTime() >= range.from && d.getTime() <= range.to;
+      const previous = await fallbackOnce();
+      const previousRows = previous
+        ? await getMatchNewsByIds(previous.items.map((i) => i.newsId).filter((id) => id !== ""))
+        : [];
+      const rowById = new Map(previousRows.map((r) => [r.id, r]));
       for (const side of feeds.failedSides) {
-        const stored = await listMatchNewsInWindow(match.id, {
-          from: new Date(anchorMs - NEWS_WINDOW_MS),
-          to: new Date(anchorMs),
-          feedSide: side,
-        });
+        const stored = previous
+          ? previous.items.flatMap((i) => {
+              const row = rowById.get(i.newsId);
+              return row && row.feedSide === side && inWindow(row.publishedAt) ? [row] : [];
+            })
+          : await listMatchNewsInWindow(match.id, {
+              from: new Date(range.from),
+              to: new Date(range.to),
+              feedSide: side,
+            });
         let kept = 0;
         for (const row of stored) {
           if (kept >= PER_SIDE_CAP || items.length >= TOTAL_CAP) break;
@@ -243,6 +281,10 @@ export function startNewsPhase(args: {
 
     const rows = await upsertMatchNews(match.id, capped, now);
     summary.itemsNew += rows.filter((r) => r.firstSeenAt.getTime() === now.getTime()).length;
+    if (!args.extract) {
+      summary.skippedNoJev++;
+      return null;
+    }
     const idByUrl = new Map(rows.map((r) => [r.url, r.id]));
     const batchItems: MatchNewsBatchItem[] = capped.map((i, idx) => ({
       ref: `N${idx + 1}`,
@@ -257,11 +299,11 @@ export function startNewsPhase(args: {
     if (existing && existing.status !== "failed") {
       await touchMatchNewsBatch(existing.id, now);
       summary.reusedBatches++;
-      if (existing.status === "empty" && existing.unknownOpponent) return fallback(match.id);
+      if (existing.status === "empty" && existing.unknownOpponent) return fallbackOnce();
       return { ...existing, checkedAt: now > existing.checkedAt ? now : existing.checkedAt };
     }
     if (existing && existing.attempts >= NEWS_EXTRACT_MAX_ATTEMPTS) {
-      return fallback(match.id);
+      return fallbackOnce();
     }
     if (!existing && capped.length === 0) {
       summary.empty++;
@@ -278,8 +320,9 @@ export function startNewsPhase(args: {
         unknownOpponent: feeds.unknownOpponent,
         aiCallId: null,
         now,
+        usableAt: runClock(),
       });
-      return inserted && !inserted.unknownOpponent ? inserted : fallback(match.id);
+      return inserted && !inserted.unknownOpponent ? inserted : fallbackOnce();
     }
 
     // Nova tentativa usa os refs do lote gravado (mesmo conjunto, mesma ordem).
@@ -291,7 +334,7 @@ export function startNewsPhase(args: {
     if (!result.ok && result.kind === "deadline") {
       // Sem tempo: não grava failed nem gasta tentativa; o próximo run tenta.
       summary.skippedDeadline++;
-      return fallback(match.id);
+      return fallbackOnce();
     }
     if (result.ok) summary.extracted++;
     else {
@@ -311,8 +354,9 @@ export function startNewsPhase(args: {
       warnings: result.ok ? result.warnings : [],
       aiCallId: result.aiCallId,
     };
+    const usableAt = runClock();
     const saved = existing
-      ? await markMatchNewsBatchRetry(existing.id, { ...outcome, now })
+      ? await markMatchNewsBatchRetry(existing.id, { ...outcome, now, usableAt })
       : await insertMatchNewsBatch({
           matchId: match.id,
           batchHash,
@@ -322,9 +366,10 @@ export function startNewsPhase(args: {
           partial: feeds.partial,
           unknownOpponent: feeds.unknownOpponent,
           now,
+          usableAt,
         });
     if (!existing) summary.batchesNew++;
-    return saved && saved.status === "ok" ? saved : fallback(match.id);
+    return saved && saved.status === "ok" ? saved : fallbackOnce();
   };
 
   const byMatch = new Map<string, Promise<StoredNewsBatch | null>>();
@@ -348,7 +393,12 @@ export function startNewsPhase(args: {
   return { byMatch, done };
 }
 
-/** Espera o lote do jogo com teto duro (o laço do JEV nunca fica preso na fase). */
+/**
+ * Espera o lote do jogo com teto duro (o laço do JEV nunca fica preso na fase). Teto
+ * esgotado (≤ 0) não é "sem lote": um lote JÁ pronto sempre volta (a promise resolvida
+ * ganha a corrida de um timer de 0 ms); só um lote ainda pendente vira null. Sem isso,
+ * todo jogo depois do primeiro (o laço gasta ~55 s por jogo) ficava sem notícia.
+ */
 export async function awaitNewsBatch(
   phase: NewsPhase | null,
   matchId: string,
@@ -356,10 +406,9 @@ export async function awaitNewsBatch(
 ): Promise<StoredNewsBatch | null> {
   const p = phase?.byMatch.get(matchId);
   if (!p) return null;
-  if (timeoutMs <= 0) return null;
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<null>((resolve) => {
-    timer = setTimeout(() => resolve(null), timeoutMs);
+    timer = setTimeout(() => resolve(null), Math.max(0, timeoutMs));
   });
   try {
     return await Promise.race([p, timeout]);

@@ -110,13 +110,21 @@ function emptySummary(): ComputeMatchModelsSummary {
   };
 }
 
+// O que a fila precisa de um lote de notícias. Row sem `usableAt` cai no `createdAt`.
+type NewsBatchStamp = { id: string; createdAt: Date; usableAt: Date | null };
+
+const batchUsableAt = (b: NewsBatchStamp) => b.usableAt ?? b.createdAt;
+
 /**
  * Ordem da fila JEV (puro). Bucket 0: jogo sem base, base sem JEV (`not_attempted`),
  * JEV que falhou (`failed`, tenta de novo antes de uma base `applied` fresca), base
  * com respostas de outra versão das perguntas, com `checked_at` mais velho que
  * JEV_STALE_MS, ou com um lote de notícias usável que a base ainda não viu (#672: outro
- * lote que o de `judgments.news`, criado depois do último `checked_at`; um lote novo
- * com a mesma evidência só faz heartbeat e não volta pro bucket 0); bucket 1: o resto.
+ * lote que o de `judgments.news`, que ficou usável (`usableAt`, relógio do run; cai no
+ * `createdAt` em row sem ele) depois do último `checked_at`. O run que aplica o lote
+ * grava a base com `checked_at` ≥ `usableAt`, então um lote novo com a mesma evidência
+ * só faz heartbeat e não volta pro bucket 0; uma nova tentativa que deu ok ou um lote que
+ * ficou pronto depois do laço do JEV desistir de esperar volta); bucket 1: o resto.
  * Dentro do bucket, kickoff mais próximo primeiro. O que não cabe no prazo do run
  * entra no próximo.
  */
@@ -124,7 +132,7 @@ export function orderJevQueue<T extends { matchId: string; kickoffAt: Date }>(
   items: T[],
   latestByMatch: Map<string, MatchModelSnapshot>,
   now: Date,
-  newsBatchByMatch: Map<string, { id: string; createdAt: Date }> = new Map(),
+  newsBatchByMatch: Map<string, NewsBatchStamp> = new Map(),
 ): T[] {
   const bucket = (item: T): number => {
     const latest = latestByMatch.get(item.matchId);
@@ -136,7 +144,7 @@ export function orderJevQueue<T extends { matchId: string; kickoffAt: Date }>(
     if (
       batch &&
       batch.id !== latest.judgments?.news?.batchId &&
-      batch.createdAt.getTime() > latest.checkedAt.getTime()
+      batchUsableAt(batch).getTime() > latest.checkedAt.getTime()
     ) {
       return 0;
     }
@@ -154,6 +162,8 @@ function logError(event: string, fields: Record<string, unknown>): void {
 
 const errMessage = (err: unknown) =>
   err instanceof Error ? err.message : String(err);
+
+const maxDate = (a: Date, b: Date) => (a.getTime() >= b.getTime() ? a : b);
 
 // Resultado memoizado da busca da tabela: `ok: false` = a chamada falhou;
 // `standing: undefined` = o provider respondeu sem tabela.
@@ -267,6 +277,8 @@ async function runComputeMatchModels(opts: {
         startedMs,
         windowMs: JEV_WINDOW_MS,
         summary: summary.news,
+        // A notícia só entra na base com o JEV tentado: sem ele, nada de Haiku.
+        extract: jevEnabled && !jevMissingKey,
       })
     : null;
   try {
@@ -281,17 +293,20 @@ async function runComputeMatchModels(opts: {
   // Os laços de λ e do JEV (corpo de antes do #672), dentro do try da fase de notícias.
   async function runModelLoops(): Promise<void> {
     // Row nova só quando o fingerprint muda; senão o heartbeat de checked_at.
+    // `checkedAt` (só quando a base viu um lote de notícias): ≥ o `usableAt` do lote, pra
+    // a fila do próximo run saber que este lote já entrou (orderJevQueue).
     const writeIfChanged = async (
       matchId: string,
       row: ReturnType<typeof buildMatchModelSnapshot>,
+      checkedAt?: Date,
     ) => {
       const latest = latestByMatch.get(matchId);
       if (latest && latest.fingerprint === row.fingerprint) {
-        await touchMatchModelSnapshot(latest.id, now);
+        await touchMatchModelSnapshot(latest.id, checkedAt ?? now);
         summary.unchanged++;
         return;
       }
-      await insertMatchModelSnapshot(row);
+      await insertMatchModelSnapshot(checkedAt ? { ...row, checkedAt } : row);
       summary.inserted++;
     };
 
@@ -299,6 +314,7 @@ async function runComputeMatchModels(opts: {
       item: JevQueueItem,
       jev: JudgmentRun | null,
       news: AppliedNews | null = null,
+      checkedAt?: Date,
     ) =>
       writeIfChanged(
         item.matchId,
@@ -309,6 +325,7 @@ async function runComputeMatchModels(opts: {
           jev,
           news,
         }),
+        checkedAt,
       );
 
     // Base sem JEV (o λ acompanha o refit), a menos que a última row do jogo tenha JEV:
@@ -384,9 +401,9 @@ async function runComputeMatchModels(opts: {
             },
           ).catch((err: unknown) => {
             logError("news_batches_read_failed", { message: errMessage(err) });
-            return new Map<string, { id: string; createdAt: Date }>();
+            return new Map<string, NewsBatchStamp>();
           })
-        : new Map<string, { id: string; createdAt: Date }>();
+        : new Map<string, NewsBatchStamp>();
     for (const item of orderJevQueue(queue, latestByMatch, now, newsBatchByMatch)) {
       try {
         if (Date.now() - startedMs > RUN_DEADLINE_MS) {
@@ -440,7 +457,8 @@ async function runComputeMatchModels(opts: {
         if (run.answers) summary.jev.applied++;
         else summary.jev.failed++;
         // Notícias (#672): o lote do jogo (em geral já pronto: o laço gasta ~55 s de
-        // API-Football por jogo), conferido com os fatos que ESTE laço buscou.
+        // API-Football por jogo), conferido com os fatos que ESTE laço buscou. Lote já
+        // pronto volta mesmo com o teto esgotado; só um pendente depois dele vira null.
         const batch = await awaitNewsBatch(
           newsPhase,
           item.matchId,
@@ -472,7 +490,9 @@ async function runComputeMatchModels(opts: {
             logError("news_apply_failed", { matchId: item.matchId, message: errMessage(err) });
           }
         }
-        await write(item, run, news);
+        // A base viu este lote (aplicado ou não): checked_at ≥ quando ele ficou usável.
+        const seenAt = batch ? maxDate(now, batchUsableAt(batch)) : undefined;
+        await write(item, run, news, seenAt);
       } catch (err) {
         summary.errors++;
         logError("match_failed", { matchId: item.matchId, message: errMessage(err) });

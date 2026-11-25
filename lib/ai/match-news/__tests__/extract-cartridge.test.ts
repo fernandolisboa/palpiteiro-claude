@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { containsNewsValueLanguage } from "@/lib/ai/palpites/value-language-guard";
+import { StoredNewsBatchSchema } from "@/lib/match-news/types";
 
 import {
   MATCH_NEWS_EXTRACT_TOOL_NAME,
@@ -141,6 +142,43 @@ describe("claimsFromNewsToolInput (saída gravada)", () => {
     expect(r.ok && r.claims).toHaveLength(8);
     expect(r.ok && r.claims[0].sources).toEqual(["N1"]);
     expect(r.ok && r.warnings[0]).toContain("8 primeiras");
+  });
+
+  it("texto de 200 caracteres com nome curto: tirar o nome alonga, mas a row gravada volta a ser lida (review #682)", () => {
+    const base = "Gabi segue fora do treino e Gabi não viaja com o grupo para o clássico";
+    const text = `${base} ${"e o departamento médico segue sem prazo ".repeat(4)}`.slice(0, 200).trim();
+    expect(text.length).toBeGreaterThan(195);
+    const r = claimsFromNewsToolInput(
+      { claims: [{ team: "home", topic: "absence", text, players: ["Gabi"], role: "attack", sources: ["N1"] }] },
+      { teams: TEAMS, refs },
+    );
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.claims).toHaveLength(1);
+    const [claim] = r.claims;
+    expect(claim.text).not.toContain("Gabi");
+    expect(claim.text).toContain("jogador citado");
+    expect(claim.text.length).toBeLessThanOrEqual(200);
+    expect(claim.text.endsWith("…")).toBe(true);
+    // Ida e volta pelo schema da leitura do lote: a afirmação gravada nunca invalida a row.
+    const stored = StoredNewsBatchSchema.safeParse({
+      id: "b",
+      matchId: "m",
+      batchHash: "h",
+      promptVersion: MATCH_NEWS_EXTRACT_VERSION,
+      items: [],
+      status: "ok",
+      claims: JSON.parse(JSON.stringify(r.claims)),
+      warnings: r.warnings,
+      attempts: 1,
+      partial: false,
+      unknownOpponent: false,
+      aiCallId: null,
+      createdAt: new Date(),
+      checkedAt: new Date(),
+      usableAt: new Date(),
+    });
+    expect(stored.success).toBe(true);
   });
 
   it("envelope inválido → ok:false; claims vazio → ok:true sem afirmação", () => {

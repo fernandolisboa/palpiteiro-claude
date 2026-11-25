@@ -125,6 +125,7 @@ const batch = (over: Partial<NewMatchNewsBatch> = {}): NewMatchNewsBatch => ({
   unknownOpponent: false,
   aiCallId: null,
   now: T0,
+  usableAt: over.now ?? T0,
   ...over,
 });
 
@@ -195,6 +196,8 @@ describe("match_news_batches", () => {
 
   it("heartbeat monotônico e nova tentativa contando attempts", async () => {
     const a = (await insertMatchNewsBatch(batch({ status: "failed", claims: [] })))!;
+    // failed não é usável: sem usableAt.
+    expect(a.usableAt).toBeNull();
     await touchMatchNewsBatch(a.id, at(3));
     await touchMatchNewsBatch(a.id, at(1));
     expect((await findMatchNewsBatch(matchId, "h1", V))?.checkedAt.getTime()).toBe(
@@ -206,8 +209,13 @@ describe("match_news_batches", () => {
       warnings: ["aviso"],
       aiCallId: null,
       now: at(4),
+      usableAt: at(4.5),
     });
     expect(retried).toMatchObject({ attempts: 2, status: "ok", warnings: ["aviso"] });
+    // A nova tentativa que deu ok marca quando ficou usável (a fila do JEV lê isto, não o
+    // created_at da 1ª tentativa).
+    expect(retried?.usableAt?.getTime()).toBe(at(4.5).getTime());
+    expect(retried?.createdAt.getTime()).toBe(T0.getTime());
   });
 
   it("lote usável: ok/empty, fresco, nunca failed nem empty com adversário estrangeiro", async () => {
@@ -244,11 +252,27 @@ describe("match_news_batches", () => {
     const bad = (await insertMatchNewsBatch(batch({ batchHash: "bad", now: at(-1) })))!;
     await realDb
       .update(schema.matchNewsBatches)
-      .set({ claims: [{ nope: true }] as never })
+      .set({ items: [{ nope: true }] as never })
       .where(eq(schema.matchNewsBatches.id, bad.id));
     const got = await getLatestUsableNewsBatch(matchId, { since: at(-12), promptVersion: V });
     expect(got?.batchHash).toBe("good");
     expect(console.error).toHaveBeenCalled();
+  });
+
+  it("afirmação inválida cai sozinha (com log): o lote segue usável com as outras", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const valid = batch().claims[0];
+    const b = (await insertMatchNewsBatch(batch({ batchHash: "mixed", now: at(-1) })))!;
+    await realDb
+      .update(schema.matchNewsBatches)
+      .set({ claims: [{ ...valid, text: "x".repeat(201) }, valid] as never })
+      .where(eq(schema.matchNewsBatches.id, b.id));
+    const got = await getLatestUsableNewsBatch(matchId, { since: at(-12), promptVersion: V });
+    expect(got?.id).toBe(b.id);
+    expect(got?.claims).toEqual([valid]);
+    expect(console.warn).toHaveBeenCalledWith(
+      expect.stringContaining("invalid_batch_claims_dropped"),
+    );
   });
 });
 

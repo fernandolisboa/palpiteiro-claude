@@ -90,7 +90,13 @@ import {
   COMPUTE_MATCH_MODELS_LOCK_KEY,
   computeMatchModels,
 } from "@/lib/model-base/compute-match-models";
-import { NEWS_EXTRACT_MAX_ATTEMPTS } from "@/lib/model-base/news-phase";
+import { canFitCall } from "@/lib/ai/deadline";
+import { UTILITY_EFFORT } from "@/lib/ai/models";
+import {
+  EXTRACT_CALL_CAP_MS,
+  NEWS_EXTRACT_MAX_ATTEMPTS,
+  NEWS_PHASE_BUDGET_MS,
+} from "@/lib/model-base/news-phase";
 import { matchModelJudgmentsSchema } from "@/lib/model-base/types";
 import { __setAbsencesProviderForTesting } from "@/lib/providers/absences";
 import { canonicalUrl } from "@/lib/providers/news/ge-rss";
@@ -491,6 +497,33 @@ describe("feed robusto (ajuste 2)", () => {
     expect(rows[0].judgments?.news?.evidence).toEqual(before.judgments?.news?.evidence);
   });
 
+  it("partial: a matéria prioritária do lado que caiu fica (ordem do lote, não published_at); hash igual (review #682)", async () => {
+    const id = await insertMatch(inHours(24));
+    // P: prioritária e mais velha que as outras do visitante (o ranking do ge a pôs no lote).
+    const P = () => ge("p", "Fluminense confirma desfalque do capitão", 30);
+    const X = (n: number, h: number) => ge(`x${n}`, `Fluminense: bastidor ${n}`, h);
+    feeds.mockResolvedValue(okFeeds([A1(), A2()], [P(), X(1, 10), X(2, 9), X(3, 8), X(4, 7)]));
+    await run();
+    // 2º run: X4 saiu do feed, X5 (mais nova) entrou → lote novo com P.
+    feeds.mockResolvedValue(okFeeds([A1(), A2()], [P(), X(1, 10), X(2, 9), X(3, 8), X(5, 1)]));
+    await run(new Date(NOW.getTime() + HOUR));
+    expect(extract).toHaveBeenCalledTimes(2);
+    const second = (await batchesOf(id)).sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0];
+    expect(second.items.map((i) => i.url)).toContain(canonicalUrl(P().url));
+
+    // 3º run: o feed do visitante cai. Os 5 itens mais novos guardados do visitante
+    // seriam X5, X4, X3, X2, X1 (sem P): outro hash e nova extração. Do último lote: o mesmo.
+    feeds.mockResolvedValue(okFeeds([A1(), A2()], [], { partial: true, failedSides: ["away"] }));
+    const third = await run(new Date(NOW.getTime() + 2 * HOUR));
+    expect(third.news).toMatchObject({ reusedBatches: 1, batchesNew: 0, extracted: 0 });
+    expect(extract).toHaveBeenCalledTimes(2);
+    const batches = await batchesOf(id);
+    expect(batches).toHaveLength(2);
+    expect(batches.find((b) => b.id === second.id)?.checkedAt.getTime()).toBe(
+      NOW.getTime() + 2 * HOUR,
+    );
+  });
+
   it("feed ok sem item: lote empty sem chamada e sem notícia na base", async () => {
     const id = await insertMatch(inHours(24));
     feeds.mockResolvedValue(okFeeds([]));
@@ -588,31 +621,38 @@ describe("mecânica do run (ajustes 1 e 6)", () => {
     expect(feeds).not.toHaveBeenCalled();
   });
 
-  it("flag do JEV OFF: a fase roda e é aguardada antes de o run voltar (sem aplicar na base)", async () => {
+  // Feed lento: prova que o run espera a fase (os itens estão gravados quando ele volta).
+  const slowFeeds = () =>
+    feeds.mockImplementation(
+      () => new Promise((resolve) => setTimeout(() => resolve(okFeeds([A1(), A2()])), 50)),
+    );
+
+  it("flag do JEV OFF: a fase lê e guarda os feeds, é aguardada, e não extrai (review #682)", async () => {
     await realDb.update(schema.aiConfig).set({ enableMatchModelJev: false });
     const id = await insertMatch(inHours(24));
-    extract.mockImplementation(
-      () => new Promise((resolve) => setTimeout(() => resolve(okExtract()), 50)),
-    );
+    slowFeeds();
     const summary = await run();
     expect(summary.jev.queued).toBe(0);
-    expect(summary.news.extracted).toBe(1);
-    expect(await batchesOf(id)).toHaveLength(1);
+    expect(summary.news).toMatchObject({ feedsOk: 1, itemsNew: 2, skippedNoJev: 1, extracted: 0 });
+    expect(extract).not.toHaveBeenCalled();
+    expect(await newsOf(id)).toHaveLength(2);
+    expect(await batchesOf(id)).toHaveLength(0);
     const [row] = await snapshotsOf(id);
     expect(row.jevStatus).toBe("not_attempted");
     expect(row.judgments).toBeNull();
   });
 
-  it("fila do JEV vazia (sem chave): a fase roda e é aguardada", async () => {
+  it("fila do JEV vazia (sem chave): a fase roda, é aguardada e não extrai", async () => {
     hasTypeSafeKey.mockReturnValue(false);
     hasKey.mockReturnValue(false);
     const id = await insertMatch(inHours(24));
-    extract.mockImplementation(
-      () => new Promise((resolve) => setTimeout(() => resolve(okExtract()), 50)),
-    );
+    slowFeeds();
     const summary = await run();
     expect(summary.jev.queued).toBe(0);
-    expect(await batchesOf(id)).toHaveLength(1);
+    expect(summary.news.skippedNoJev).toBe(1);
+    expect(extract).not.toHaveBeenCalled();
+    expect(await newsOf(id)).toHaveLength(2);
+    expect(await batchesOf(id)).toHaveLength(0);
   });
 
   it("prazo do JEV estourado: a base fica sem JEV, mas o lote é gravado", async () => {
@@ -626,6 +666,78 @@ describe("mecânica do run (ajustes 1 e 6)", () => {
     expect(judge).not.toHaveBeenCalled();
     expect(await batchesOf(id)).toHaveLength(1);
     expect((await snapshotsOf(id))[0].jevStatus).toBe("not_attempted");
+  });
+
+  it("jogos do JEV que começam depois do prazo da fase ainda recebem o lote pronto (review #682)", async () => {
+    const ids = [await insertMatch(inHours(30)), await insertMatch(inHours(20)), await insertMatch(inHours(10))];
+    // Cada JEV "leva" 55 s: o 2º e o 3º jogos esperam o lote com o teto já esgotado.
+    const realNow = Date.now.bind(Date);
+    let offset = 0;
+    vi.spyOn(Date, "now").mockImplementation(() => realNow() + offset);
+    let firstJudge = true;
+    judge.mockImplementation(async () => {
+      if (firstJudge) {
+        firstJudge = false;
+        // A fase (toda mockada) termina antes de o relógio andar.
+        while ((await realDb.select().from(schema.matchNewsBatches)).length < 3) {
+          await new Promise((r) => setTimeout(r, 5));
+        }
+        await new Promise((r) => setTimeout(r, 20));
+      }
+      offset += 55_000;
+      return jevResult();
+    });
+    const summary = await run();
+    vi.mocked(Date.now).mockRestore();
+    expect(summary.jev).toMatchObject({ applied: 3, skippedDeadline: 0 });
+    expect(summary.news).toMatchObject({ batchesNew: 3, matchesWithEvidence: 3 });
+    for (const id of ids) {
+      const [batch] = await batchesOf(id);
+      const [row] = await snapshotsOf(id);
+      expect(row.judgments?.news?.batchId).toBe(batch.id);
+      // A base viu o lote: checked_at ≥ quando ele ficou usável (a fila não o repete).
+      expect(row.checkedAt.getTime()).toBeGreaterThanOrEqual(batch.usableAt!.getTime());
+    }
+  });
+
+  it("alvos da fase em ordem de kickoff; extração com o prazo da fase e o teto de 30 s (review #682)", async () => {
+    const late = await insertMatch(inHours(40));
+    const early = await insertMatch(inHours(5));
+    const before = Date.now();
+    await run();
+    const order = feeds.mock.calls.map((c) => (c[1] as { matchId: string }).matchId);
+    expect(order).toEqual([early, late]);
+    const [extractArgs] = extract.mock.calls[0] as [{ deadlineAt: number; maxCallMs: number }];
+    expect(extractArgs.maxCallMs).toBe(EXTRACT_CALL_CAP_MS);
+    expect(EXTRACT_CALL_CAP_MS).toBeGreaterThan(20_000);
+    // O prazo passado é o da fase (início do run + 45 s), não "agora + teto": o
+    // canFitCall real ainda deixa a chamada passar depois de 20 s de fila.
+    expect(extractArgs.deadlineAt).toBeGreaterThanOrEqual(before + NEWS_PHASE_BUDGET_MS);
+    expect(extractArgs.deadlineAt).toBeLessThanOrEqual(Date.now() + NEWS_PHASE_BUDGET_MS);
+    expect(
+      canFitCall(
+        extractArgs.deadlineAt,
+        { speed: "fast", maxTokens: 4096, effort: UTILITY_EFFORT },
+        extractArgs.deadlineAt - NEWS_PHASE_BUDGET_MS + 20_000,
+      ),
+    ).toBe(true);
+  });
+
+  it("nova tentativa que deu ok marca usable_at e a base gravada no run a cobre", async () => {
+    const id = await insertMatch(inHours(24));
+    extract.mockResolvedValueOnce({ ok: false, kind: "failed", message: "zod", aiCallId: null });
+    await run();
+    let [batch] = await batchesOf(id);
+    expect(batch.usableAt).toBeNull();
+    const later = new Date(NOW.getTime() + HOUR);
+    await run(later);
+    [batch] = await batchesOf(id);
+    expect(batch).toMatchObject({ status: "ok", attempts: 2 });
+    expect(batch.usableAt!.getTime()).toBeGreaterThanOrEqual(later.getTime());
+    expect(batch.createdAt.getTime()).toBe(NOW.getTime());
+    const latest = await getLatestMatchModelSnapshot(id);
+    expect(latest?.judgments?.news?.batchId).toBe(batch.id);
+    expect(latest!.checkedAt.getTime()).toBeGreaterThanOrEqual(batch.usableAt!.getTime());
   });
 
   it("feed que lança não derruba o run nem conta erro", async () => {

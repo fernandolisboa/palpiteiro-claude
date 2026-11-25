@@ -34,9 +34,12 @@ CREATE TABLE IF NOT EXISTS "match_news_batches" (
 	"ai_call_id" uuid,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"checked_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"usable_at" timestamp with time zone,
 	CONSTRAINT "match_news_batches_status_check" CHECK ("match_news_batches"."status" IN ('ok', 'empty', 'failed'))
 );
 --> statement-breakpoint
+-- usable_at entrou depois da 1ª versão desta migration (DB de preview que já a rodou).
+ALTER TABLE "match_news_batches" ADD COLUMN IF NOT EXISTS "usable_at" timestamp with time zone;--> statement-breakpoint
 ALTER TABLE "ai_calls" DROP CONSTRAINT IF EXISTS "ai_calls_user_id_system_only";--> statement-breakpoint
 ALTER TABLE "ai_config" ADD COLUMN IF NOT EXISTS "enable_news_factors" boolean DEFAULT true NOT NULL;--> statement-breakpoint
 DO $$ BEGIN

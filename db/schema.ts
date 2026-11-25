@@ -1436,6 +1436,9 @@ export const matchNewsBatches = pgTable(
     aiCallId: uuid().references(() => aiCalls.id, { onDelete: "set null" }),
     createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
     checkedAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    // Quando o lote ficou usável (ok/empty), em hora real: no insert ou na nova tentativa
+    // que deu ok. A fila do JEV compara com o checked_at da base (#672). null = failed.
+    usableAt: timestamp({ withTimezone: true }),
   },
   (t) => [
     check(

@@ -5,6 +5,8 @@ import {
   orderJevQueue,
 } from "@/lib/model-base/compute-match-models";
 import { JUDGMENTS_VERSION } from "@/lib/ai/judgments/questions";
+import type { StoredNewsBatch } from "@/lib/match-news/types";
+import { awaitNewsBatch, type NewsPhase } from "@/lib/model-base/news-phase";
 import type { MatchModelSnapshot } from "@/lib/model-base/types";
 
 const NOW = new Date("2026-05-14T12:00:00Z");
@@ -94,9 +96,9 @@ describe("orderJevQueue (puro)", () => {
       ["old-batch", latest("old-batch", "applied", at(-1))],
     ]);
     const batches = new Map([
-      ["new-batch", { id: "b-9", createdAt: at(-0.5) }],
-      ["same-batch", { id: "b-2", createdAt: at(-0.5) }],
-      ["old-batch", { id: "b-3", createdAt: at(-2) }],
+      ["new-batch", { id: "b-9", createdAt: at(-0.5), usableAt: at(-0.5) }],
+      ["same-batch", { id: "b-2", createdAt: at(-0.5), usableAt: at(-0.5) }],
+      ["old-batch", { id: "b-3", createdAt: at(-2), usableAt: at(-2) }],
     ]);
     expect(orderJevQueue(items, byMatch, NOW, batches).map((i) => i.matchId)).toEqual([
       "new-batch",
@@ -113,6 +115,35 @@ describe("orderJevQueue (puro)", () => {
     ]);
   });
 
+  it("compara com quando o lote ficou usável, não com quando foi criado (review #682, achado 5)", () => {
+    const items = [
+      { matchId: "fresh", kickoffAt: at(2) },
+      { matchId: "retried", kickoffAt: at(30) },
+      { matchId: "seen", kickoffAt: at(20) },
+      { matchId: "legacy", kickoffAt: at(10) },
+    ];
+    const byMatch = new Map<string, MatchModelSnapshot>([
+      ["fresh", latest("fresh", "applied", at(-1))],
+      ["retried", latest("retried", "applied", at(-1))],
+      ["seen", latest("seen", "applied", at(-1))],
+      ["legacy", latest("legacy", "applied", at(-1))],
+    ]);
+    const batches = new Map([
+      // 1ª tentativa falhou há 3h; a nova tentativa deu ok há 30 min, depois da base.
+      ["retried", { id: "b-r", createdAt: at(-3), usableAt: at(-0.5) }],
+      // A base foi gravada com checked_at = usableAt (o run que aplicou o lote).
+      ["seen", { id: "b-s", createdAt: at(-1), usableAt: at(-1) }],
+      // Row sem usableAt cai no createdAt.
+      ["legacy", { id: "b-l", createdAt: at(-0.5), usableAt: null }],
+    ]);
+    expect(orderJevQueue(items, byMatch, NOW, batches).map((i) => i.matchId)).toEqual([
+      "legacy",
+      "retried",
+      "fresh",
+      "seen",
+    ]);
+  });
+
   it("não muta a entrada", () => {
     const items = [
       { matchId: "b", kickoffAt: at(5) },
@@ -121,5 +152,33 @@ describe("orderJevQueue (puro)", () => {
     const out = orderJevQueue(items, new Map(), NOW);
     expect(out.map((i) => i.matchId)).toEqual(["a", "b"]);
     expect(items.map((i) => i.matchId)).toEqual(["b", "a"]);
+  });
+});
+
+describe("awaitNewsBatch (review #682, achado 1)", () => {
+  const batch = { id: "b-1" } as StoredNewsBatch;
+  const phaseOf = (p: Promise<StoredNewsBatch | null>): NewsPhase => ({
+    byMatch: new Map([["m", p]]),
+    done: p.then(() => undefined),
+  });
+
+  it("lote já pronto volta mesmo com o teto esgotado (0 ou negativo)", async () => {
+    const phase = phaseOf(Promise.resolve(batch));
+    expect(await awaitNewsBatch(phase, "m", 0)).toBe(batch);
+    expect(await awaitNewsBatch(phase, "m", -60_000)).toBe(batch);
+  });
+
+  it("lote pendente: teto esgotado vira null na hora; teto positivo espera", async () => {
+    let resolve!: (b: StoredNewsBatch) => void;
+    const phase = phaseOf(new Promise<StoredNewsBatch | null>((r) => (resolve = r)));
+    expect(await awaitNewsBatch(phase, "m", -1)).toBeNull();
+    const waiting = awaitNewsBatch(phase, "m", 1_000);
+    resolve(batch);
+    expect(await waiting).toBe(batch);
+  });
+
+  it("sem fase ou jogo fora dos alvos: null", async () => {
+    expect(await awaitNewsBatch(null, "m", 1_000)).toBeNull();
+    expect(await awaitNewsBatch(phaseOf(Promise.resolve(batch)), "x", 1_000)).toBeNull();
   });
 });

@@ -3,6 +3,7 @@ import { and, asc, desc, eq, gte, inArray, lte, not, sql } from "drizzle-orm";
 import { matchNews, matchNewsBatches } from "@/db/schema";
 import { db } from "@/lib/db";
 import {
+  NewsClaimSchema,
   StoredNewsBatchSchema,
   type MatchNewsBatchItem,
   type MatchNewsBatchStatus,
@@ -15,6 +16,7 @@ import {
 // idempotente (o cron pode rodar de novo, sobreposto ou depois de morrer no meio): item
 // único por (jogo, URL) e lote único por (jogo, hash, versão do prompt). Toda leitura
 // de lote passa pelo Zod (jsonb); row inválida → omitida com log, nunca derruba o cron.
+// Afirmação inválida dentro de um lote válido cai sozinha (com log): o lote segue usável.
 
 export type NewMatchNewsItem = {
   url: string;
@@ -113,7 +115,30 @@ export async function getMatchNewsByIds(ids: readonly string[]): Promise<MatchNe
 type BatchRow = typeof matchNewsBatches.$inferSelect;
 
 function parseBatch(row: BatchRow): StoredNewsBatch | null {
-  const parsed = StoredNewsBatchSchema.safeParse(row);
+  // Item a item: uma afirmação que não volta a passar no Zod (gravada por uma versão
+  // anterior do extrator, por exemplo) não derruba o lote inteiro, senão o cron
+  // re-extrairia (e pagaria) em todo run.
+  const rawClaims: unknown = row.claims;
+  let claims: unknown = rawClaims;
+  if (Array.isArray(rawClaims)) {
+    const valid = rawClaims.flatMap((c: unknown) => {
+      const p = NewsClaimSchema.safeParse(c);
+      return p.success ? [p.data] : [];
+    });
+    if (valid.length < rawClaims.length) {
+      console.warn(
+        JSON.stringify({
+          scope: "match_news_batches",
+          event: "invalid_batch_claims_dropped",
+          batchId: row.id,
+          matchId: row.matchId,
+          dropped: rawClaims.length - valid.length,
+        }),
+      );
+    }
+    claims = valid;
+  }
+  const parsed = StoredNewsBatchSchema.safeParse({ ...row, claims });
   if (parsed.success) return parsed.data;
   console.error(
     JSON.stringify({
@@ -161,6 +186,8 @@ export type NewMatchNewsBatch = {
   unknownOpponent: boolean;
   aiCallId: string | null;
   now: Date;
+  // Hora real (relógio do run) em que o lote ficou usável; null quando `failed`.
+  usableAt: Date | null;
 };
 
 /**
@@ -185,6 +212,7 @@ export async function insertMatchNewsBatch(
       aiCallId: b.aiCallId,
       createdAt: b.now,
       checkedAt: b.now,
+      usableAt: b.status === "failed" ? null : b.usableAt,
     })
     .onConflictDoNothing({
       target: [
@@ -215,6 +243,7 @@ export async function markMatchNewsBatchRetry(
     warnings: string[];
     aiCallId: string | null;
     now: Date;
+    usableAt: Date | null;
   },
 ): Promise<StoredNewsBatch | null> {
   const [row] = await db
@@ -225,6 +254,7 @@ export async function markMatchNewsBatchRetry(
       claims: r.claims,
       warnings: r.warnings,
       aiCallId: r.aiCallId,
+      usableAt: r.status === "failed" ? null : r.usableAt,
       checkedAt: sql`GREATEST(${matchNewsBatches.checkedAt}, ${r.now.toISOString()}::timestamptz)`,
     })
     .where(eq(matchNewsBatches.id, id))
